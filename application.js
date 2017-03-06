@@ -6,20 +6,25 @@ const _ = require('lodash');
 const async = require('async');
 const ContainershipPlugin = require('containership.plugin');
 
+const PLUGIN_NAME = 'containership-metrics';
+const PROMETHEUS_AGENT_APPLICATION_NAME = 'containership-prometheus-agents';
+const PROMETHEUS_SERVER_APPLICATION_NAME = 'containership-prometheus';
+
 module.exports = new ContainershipPlugin({
     type: 'core',
 
-    initialize: function(core) {
-        const add_prometheus_agents = () => {
-            const application_name = 'containership-prometheus-agents';
-            core.logger.register(application_name);
+    runFollower: function(core) {
+        core.loggers[PLUGIN_NAME].log('verbose', `${PLUGIN_NAME} does not run on follower nodes.`);
+    },
 
+    runLeader: function(core) {
+        const add_prometheus_agents = () => {
             core.cluster.myriad.persistence.get(
-                    [core.constants.myriad.APPLICATION_PREFIX, application_name].join(core.constants.myriad.DELIMITER),
+                    [core.constants.myriad.APPLICATION_PREFIX, PROMETHEUS_AGENT_APPLICATION_NAME].join(core.constants.myriad.DELIMITER),
                     (err) => {
                         if(err) {
                             return core.applications.add({
-                                id: application_name,
+                                id: PROMETHEUS_AGENT_APPLICATION_NAME,
                                 image: 'containership/prometheus-metric-targets:1.x',
                                 cpus: 0.1,
                                 memory: 64,
@@ -29,7 +34,7 @@ module.exports = new ContainershipPlugin({
                                         per_host: 1
                                     },
                                     metadata: {
-                                        plugin: application_name,
+                                        plugin: PROMETHEUS_AGENT_APPLICATION_NAME,
                                         ancestry: 'containership.plugin'
                                     }
                                 },
@@ -58,11 +63,11 @@ module.exports = new ContainershipPlugin({
                                     }
                                 ]
                             }, () => {
-                                core.loggers[application_name].log('verbose', ['Created ', application_name, '!'].join(''));
+                                core.loggers[PLUGIN_NAME].log('verbose', ['Created ', PROMETHEUS_AGENT_APPLICATION_NAME, '!'].join(''));
                             });
                         }
 
-                        return core.loggers[application_name].log('verbose', [application_name, 'already exists, skipping create!'].join(' '));
+                        return core.loggers[PLUGIN_NAME].log('verbose', [PROMETHEUS_AGENT_APPLICATION_NAME, 'already exists, skipping create!'].join(' '));
                     }
             );
         };
@@ -70,9 +75,6 @@ module.exports = new ContainershipPlugin({
         let add_prometheus_timeout = null;
 
         const add_prometheus_server = () => {
-            const application_name = 'containership-prometheus';
-            core.logger.register(application_name);
-
             const available_hosts = core.cluster.legiond.get_peers();
             available_hosts.push(core.cluster.legiond.get_attributes());
             const follower_hosts = _.filter(available_hosts, (host) => host.mode === 'follower');
@@ -91,7 +93,7 @@ module.exports = new ContainershipPlugin({
             // 5. if no containers are loaded, assume host constraint violated, update app, trigger another add_prometheus_check in 1 minute
             return async.waterfall([
                 function checkIfAppExists(callback) {
-                    return core.cluster.myriad.persistence.get([core.constants.myriad.APPLICATION_PREFIX, application_name].join(core.constants.myriad.DELIMITER), function(err) {
+                    return core.cluster.myriad.persistence.get([core.constants.myriad.APPLICATION_PREFIX, PROMETHEUS_SERVER_APPLICATION_NAME].join(core.constants.myriad.DELIMITER), function(err) {
                         // return false if err was returned because that means app does not exist, true otherwise
                         return callback(null, err ? false : true);
                     });
@@ -104,7 +106,7 @@ module.exports = new ContainershipPlugin({
                     const pinned_host = follower_hosts[Math.floor(Math.random() * follower_hosts.length)];
 
                     return core.applications.add({
-                        id: application_name,
+                        id: PROMETHEUS_SERVER_APPLICATION_NAME,
                         image: 'containership/prometheus-metric-server:1.x',
                         cpus: 0.1,
                         memory: 320, // todo - configure memory based on node size
@@ -113,7 +115,7 @@ module.exports = new ContainershipPlugin({
                         tags: {
                             host_name: pinned_host.host_name,
                             metadata: {
-                                plugin: application_name,
+                                plugin: PROMETHEUS_SERVER_APPLICATION_NAME,
                                 ancestry: 'containership.plugin'
                             }
                         },
@@ -135,12 +137,12 @@ module.exports = new ContainershipPlugin({
                             }
                         ]
                     }, () => {
-                        core.loggers[application_name].log('verbose', ['Created ', application_name, '!'].join(''));
+                        core.loggers[PLUGIN_NAME].log('verbose', ['Created ', PROMETHEUS_SERVER_APPLICATION_NAME, '!'].join(''));
                         return callback();
                     });
                 },
                 function checkIfContainersExist(callback) {
-                    return core.applications.get_containers(application_name, (err, containers) => {
+                    return core.applications.get_containers(PROMETHEUS_SERVER_APPLICATION_NAME, (err, containers) => {
                         if (err || !containers || 0 === containers.length) {
                             return callback(null, []);
                         }
@@ -154,7 +156,7 @@ module.exports = new ContainershipPlugin({
                     // attempt to check in 30 seconds in-case container was legitimately in process of loading
                     if (0 === loadedContainers.length) {
                         return setTimeout(() => {
-                            return core.applications.get_containers(application_name, (err, containers) => {
+                            return core.applications.get_containers(PROMETHEUS_SERVER_APPLICATION_NAME, (err, containers) => {
                                 if (err || !containers || 0 === containers.length) {
                                     return callback(null, {
                                         containers_deployed: false,
@@ -181,11 +183,11 @@ module.exports = new ContainershipPlugin({
                 function launchContainersIfNeeded(containerInfo, callback) {
                     // no containers deployed, attempt to deploy
                     if (!containerInfo.containers_deployed) {
-                        return core.applications.deploy_container(application_name, {}, (err) => {
+                        return core.applications.deploy_container(PROMETHEUS_SERVER_APPLICATION_NAME, {}, (err) => {
                             if (err) {
-                                core.loggers[application_name].log('error', `${application_name} failed to deploy: ${err.message}`);
+                                core.loggers[PLUGIN_NAME].log('error', `${PROMETHEUS_SERVER_APPLICATION_NAME} failed to deploy: ${err.message}`);
                             } else {
-                                core.loggers[application_name].log('verbose', `${application_name} container deploy`);
+                                core.loggers[PLUGIN_NAME].log('verbose', `${PROMETHEUS_SERVER_APPLICATION_NAME} container deploy`);
                             }
 
                             return callback();
@@ -197,11 +199,11 @@ module.exports = new ContainershipPlugin({
                         const pinned_host = follower_hosts[Math.floor(Math.random() * follower_hosts.length)];
 
                         return core.applications.add({
-                            id: application_name,
+                            id: PROMETHEUS_SERVER_APPLICATION_NAME,
                             tags: {
                                 host_name: pinned_host.host_name,
                                 metadata: {
-                                    plugin: application_name,
+                                    plugin: PROMETHEUS_SERVER_APPLICATION_NAME,
                                     ancestry: 'containership.plugin'
                                 }
                             }
@@ -219,35 +221,33 @@ module.exports = new ContainershipPlugin({
             });
         };
 
-        if('leader' === core.options.mode) {
-            if(core.cluster.praetor.is_controlling_leader()) {
-                add_prometheus_server();
-                add_prometheus_agents();
-            }
-
-            core.cluster.legiond.on('demoted', () => {
-                if (add_prometheus_timeout) {
-                    clearTimeout(add_prometheus_timeout);
-                }
-            });
-
-            core.cluster.legiond.on('promoted', () => {
-                core.cluster.myriad.persistence.keys(core.constants.myriad.APPLICATIONS, (err, applications) => {
-                    if(err || !_.isEmpty(applications)) {
-                        add_prometheus_server();
-                        add_prometheus_agents();
-                        return;
-                    }
-
-                    return setTimeout(() => {
-                        add_prometheus_server();
-                        add_prometheus_agents();
-                    }, 2000);
-                });
-            });
-
-            return metrics.Init(core).register_routes();
+        if(core.cluster.praetor.is_controlling_leader()) {
+            add_prometheus_server();
+            add_prometheus_agents();
         }
+
+        core.cluster.legiond.on('demoted', () => {
+            if (add_prometheus_timeout) {
+                clearTimeout(add_prometheus_timeout);
+            }
+        });
+
+        core.cluster.legiond.on('myriad.bootstrapped', () => {
+            add_prometheus_server();
+            add_prometheus_agents();
+        });
+
+        return metrics.Init(core).register_routes();
+    },
+
+    initialize: function(core) {
+        core.logger.register(PLUGIN_NAME);
+
+        if(core.options.mode === 'leader') {
+            return module.exports.runLeader(core);
+        }
+
+        return module.exports.runFollower(core);
     },
 
     reload: function() {}
