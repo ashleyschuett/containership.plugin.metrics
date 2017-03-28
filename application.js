@@ -241,13 +241,17 @@ module.exports = new ContainershipPlugin({
     },
 
     initialize: function(core) {
+        if (!core || !core.logger) {
+            return console.warn(`The ${PLUGIN_NAME} plugin does not support CLI initialization`);
+        }
+
         core.logger.register(PLUGIN_NAME);
 
         if(core.options.mode === 'leader') {
             return module.exports.runLeader(core);
+        } else if(core.options.mode === 'follower') {
+            return module.exports.runFollower(core);
         }
-
-        return module.exports.runFollower(core);
     },
 
     reload: function() {}
