@@ -251,6 +251,9 @@ module.exports = new ContainershipPlugin({
             return module.exports.runLeader(core);
         } else if(core.options.mode === 'follower') {
             return module.exports.runFollower(core);
+        } else if(core.logger) {
+            core.logger.register(PLUGIN_NAME);
+            return core.loggers[PLUGIN_NAME].log('error', 'Invalid configuration found when initializing containership metrics plugin!');
         }
     },
 
