@@ -1,6 +1,6 @@
 {
   "name": "containership.plugin.metrics",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Official metric plugin for ContainerShip",
   "main": "application.js",
   "scripts": {
