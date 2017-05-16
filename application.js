@@ -27,7 +27,7 @@ module.exports = new ContainershipPlugin({
                                 id: PROMETHEUS_AGENT_APPLICATION_NAME,
                                 image: 'containership/prometheus-metric-targets:1.x',
                                 cpus: 0.1,
-                                memory: 64,
+                                memory: 80,
                                 network_mode: 'bridge',
                                 tags: {
                                     constraints: {
